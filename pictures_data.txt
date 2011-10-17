@@ -1,0 +1,8 @@
+images/castelsantangelo.JPG	Castel S. Angelo	400
+images/chiesaminerva.JPG	S. Maria s. Minerva	250
+images/pantheon.JPG	Pantheon	600
+images/piazzanavona.JPG	Piazza Navona	700
+images/piazzatrilussa.JPG	Piazza Trilussa	300
+images/sanclemente.jpg	San Clemente	250
+images/sangiovanni.jpg	San Giovanni	300
+images/sanpaolo.JPG	San Paolo	150

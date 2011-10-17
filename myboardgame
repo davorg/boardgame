@@ -1,0 +1,167 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use 5.010;
+
+use Image::Magick;
+
+#initial coordinates
+my $x = 100;
+my $y = 100;
+
+#Width and Height of each box, squares per side
+my $box_width  = 300;
+my $box_height = $box_width;
+my $square_dist = 100 + $box_width;
+my $squares_per_side = 4;
+
+my %special_squares = (          #first field is the position
+  0 => "NO\tGo\tGood Luck",      # in the square sequence
+  3 => "NO\tChance\ttake yours",
+  6 => "NO\tFree Parking\t",
+  9 => "NO\tJail\ttoo bad!",
+);
+
+# Create and prepare the big, white background image
+my $board_size = ($box_width + $square_dist) * $squares_per_side;
+my ($image, $r) = Image::Magick->new;
+$image->Set(size => "${board_size}x$board_size");
+$image->ReadImage("xc:white");
+
+# Read picture names, captions and other info from the data files,
+# inserting the special squares in the right places
+open my $pics_list, '<', 'pictures_data.txt'
+  or die "Cannot open pictures data file: $!\n";
+
+my @ordered_squares;
+my $i = 0;
+while (<$pics_list>) {
+  if (defined $special_squares{$i}) {
+      push @ordered_squares, $special_squares{$i++} ;
+  }
+  chomp;
+  push @ordered_squares, $_;
+  $i++;
+}
+close $pics_list;
+
+my $rotation = 180;
+
+# now add all the squares to the board
+foreach my $i (0 .. $#ordered_squares) {
+
+  my ($pic_name, $caption, $price) = split /\t/,  $ordered_squares[$i];
+  
+  # draw a box, add the captions in it and save it in /tmp/tmp_image.jpg
+
+  draw_border_add_captions($box_width, $box_height, $caption, $price);
+
+  # if there is a current picture, resize it and put it
+  # at the center of the temporary image
+  insert_picture($pic_name, $box_width - 40, $box_height - 120)
+      unless $pic_name =~ m/^NO$/;
+
+  my $tmp_image = Image::Magick->new;
+  $tmp_image->ReadImage('/tmp/tmp_image.jpg');
+  $tmp_image->Rotate(degrees => $rotation) if $rotation > 0;
+  # place the current square at the right position on the board
+  $image->Composite(image => $tmp_image, compose => 'over', geometry => "+$y+$x");
+  undef $tmp_image;
+
+  #calculate new rotation value and origin of the next square;
+  # if index is a multiple of $SQUARES_PER_SIDE
+  # we've reached a corner of the board, let's increase image rotation
+  $rotation += 90 if ($i > 0 ) && ( $i % ( $squares_per_side - 1) == 0);
+  $rotation -= 360 if ($rotation >= 360);
+
+  given ($rotation) {
+    when (180) {
+      $y += $square_dist;
+    }
+    when (270) {
+      $x += $square_dist; 
+    }
+    when (0) {
+      $y -= $square_dist;
+    }
+    when (90) {
+      $x -= $square_dist;
+    }
+    default {
+      die "wrong Rotation value: $rotation\n";
+    }
+  }
+
+}
+
+# add central slogan and save
+$image->Annotate( text => 'Linux Format rules!', stroke => 'red', pointsize => 90,
+                  rotate=> 215, x => int($board_size * 0.4), y => int($board_size * 0.4));
+$image->write ('jpg:board.jpg');
+
+exit;
+
+############################################################################################
+sub draw_border_add_captions  {
+
+  my ($bw, $bh, $bc, $bp) = @_;
+
+  my $tmp_image = Image::Magick->new;
+  $tmp_image->Set(size=>"${bw}x$bh");
+  $tmp_image->ReadImage("xc:white");
+
+  my $x_line_start = 10;
+  my $y_line_start = 10;
+  my $x_line_end   = 10;
+  my $y_line_end   = $bw - 10;
+
+  $tmp_image->Draw ( stroke => 'red', primitive => 'line',
+                     points => "$y_line_start,$x_line_start $y_line_end,$x_line_end" );
+
+  $x_line_start = 10;
+  $y_line_start = $bw - 10;
+  $x_line_end   = $bh - 10;
+  $y_line_end   = $bw - 10;
+
+  $tmp_image->Draw( stroke => 'blue', primitive => 'line',
+                    points => "$y_line_start,$x_line_start $y_line_end,$x_line_end" );
+
+  $x_line_start = $bh - 10;
+  $y_line_start = $bw - 10;
+  $x_line_end   = $bh - 10;
+  $y_line_end   = 10;
+  $tmp_image->Draw( stroke => 'green', primitive => 'line',
+                    points => "$y_line_start,$x_line_start $y_line_end,$x_line_end" );
+
+  $y_line_start   = 10;
+  $x_line_start   = $bh - 10;
+  $x_line_end     = 10;
+  $y_line_end     = 10;
+  $tmp_image->Draw( stroke => 'red', primitive => 'line',
+                    points => "$y_line_start,$x_line_start $y_line_end,$x_line_end");
+	           
+  #add Caption and price to temporary image
+  $tmp_image->Annotate( text => $bc, stroke =>'blue', pointsize=> 24,
+                        x => 20, y => 10 + int($bh * 0.75 + 20));
+  $tmp_image->Annotate( text => $bp, stroke =>'red', pointsize=> 16,
+                        x => 40, y => 10 + int($bh * 0.75 + 40));
+  $tmp_image -> write ('jpg:/tmp/tmp_image.jpg');
+}
+
+#####################################################################################
+sub insert_picture {
+  my ($pic, $th_w, $th_h) = @_;
+  
+  my $current_pic = Image::Magick->new;
+  $current_pic->ReadImage($pic);
+  $current_pic->Resize(width => $th_w, height => $th_h);
+  
+  my $tmp_image = Image::Magick->new;
+  $tmp_image->ReadImage('/tmp/tmp_image.jpg');
+
+  #put the current picture at the center of the temporary image
+  $tmp_image->Composite(image => $current_pic, compose => 'over', geometry => "+20+20");
+  $tmp_image->write('jpg:/tmp/tmp_image.jpg');
+}
